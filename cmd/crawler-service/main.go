@@ -7,9 +7,12 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"recommand/internal/config"
+	"recommand/internal/crawler"
 	"recommand/internal/db"
 	chttp "recommand/internal/http"
+	"recommand/internal/http/handlers"
 	"recommand/internal/kafka"
+	"recommand/internal/repository"
 )
 
 func main() {
@@ -33,7 +36,14 @@ func main() {
 	defer kafkaWriter.Close()
 
 	r := gin.Default()
-	chttp.RegisterRoutes(r)
+
+	sourceRepo := repository.NewSourceRepo(pgDB)
+	taskRepo := repository.NewTaskRepo(pgDB)
+	sourceHandler := handlers.NewSourceHandler(sourceRepo)
+	engine := crawler.NewEngine(taskRepo, sourceRepo, kafkaWriter, logger)
+	taskHandler := handlers.NewTaskHandler(sourceRepo, taskRepo, engine)
+
+	chttp.RegisterRoutes(r, sourceHandler, taskHandler)
 
 	addr := cfg.HTTP.ListenAddr
 	logger.Printf("crawler-service listening on %s", addr)

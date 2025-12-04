@@ -1,6 +1,7 @@
 package kafka
 
 import (
+	"context"
 	"recommand/internal/config"
 
 	"github.com/segmentio/kafka-go"
@@ -36,4 +37,20 @@ func (w *Writer) Close() error {
 		return err
 	}
 	return nil
+}
+
+// WriteRaw writes a single message value to the raw topic.
+func (w *Writer) WriteRaw(ctx context.Context, value []byte) error {
+	if w == nil || w.Raw == nil {
+		return nil
+	}
+	return w.Raw.WriteMessages(ctx, kafka.Message{Value: value})
+}
+
+// WriteParsed writes a single message value to the parsed topic.
+func (w *Writer) WriteParsed(ctx context.Context, value []byte) error {
+	if w == nil || w.Parsed == nil {
+		return nil
+	}
+	return w.Parsed.WriteMessages(ctx, kafka.Message{Value: value})
 }
