@@ -6,6 +6,7 @@ type Config struct {
 	HTTP     HTTPConfig
 	Database DatabaseConfig
 	Kafka    KafkaConfig
+	ES       ESConfig
 }
 
 type HTTPConfig struct {
@@ -20,6 +21,13 @@ type KafkaConfig struct {
 	Brokers     []string `envconfig:"KAFKA_BROKERS" default:"localhost:9092"`
 	TopicRaw    string   `envconfig:"KAFKA_TOPIC_RAW" default:"news.raw"`
 	TopicParsed string   `envconfig:"KAFKA_TOPIC_PARSED" default:"news.parsed"`
+}
+
+type ESConfig struct {
+	Address  string `envconfig:"ES_ADDRESS" default:"http://localhost:9200"`
+	Username string `envconfig:"ES_USERNAME" default:"elastic"`
+	Password string `envconfig:"ES_PASSWORD" default:""`
+	Index    string `envconfig:"ES_INDEX" default:"news"`
 }
 
 func Load(cfg *Config) error {

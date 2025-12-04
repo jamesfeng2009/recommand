@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"time"
@@ -34,6 +36,7 @@ type ParsedNews struct {
 	Content     string    `json:"content"`
 	PublishTime time.Time `json:"publish_time"`
 	CrawlTime   time.Time `json:"crawl_time"`
+	Hash        string    `json:"hash"`
 }
 
 func main() {
@@ -82,16 +85,17 @@ func main() {
 			continue
 		}
 
-		if raw.SourceCode != "people_military" {
-			// 目前只处理 people_military，其他来源先跳过
+		article, err := content.Parse(raw.SourceCode, raw.BodySnippet)
+		if err != nil {
+			log.Printf("parse source=%s failed at offset=%d: %v", raw.SourceCode, m.Offset, err)
 			continue
 		}
 
-		article, err := content.ParsePeopleMilitary(raw.BodySnippet)
-		if err != nil {
-			log.Printf("parse people_military failed at offset=%d: %v", m.Offset, err)
-			continue
-		}
+		h := sha256.New()
+		h.Write([]byte(raw.URL))
+		h.Write([]byte(article.Title))
+		h.Write([]byte(article.PublishTime.Format(time.RFC3339)))
+		hash := hex.EncodeToString(h.Sum(nil))
 
 		parsed := ParsedNews{
 			ID:          raw.TaskID + "::" + raw.URL, // 简单 ID，后续可换成 uuid/hash
@@ -103,6 +107,7 @@ func main() {
 			Content:     article.Content,
 			PublishTime: article.PublishTime,
 			CrawlTime:   time.Now().UTC(),
+			Hash:        hash,
 		}
 
 		b, err := json.Marshal(parsed)

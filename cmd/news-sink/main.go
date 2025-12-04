@@ -25,6 +25,7 @@ type ParsedNews struct {
 	Content     string    `json:"content"`
 	PublishTime time.Time `json:"publish_time"`
 	CrawlTime   time.Time `json:"crawl_time"`
+	Hash        string    `json:"hash"`
 }
 
 func main() {
@@ -83,22 +84,22 @@ func main() {
 }
 
 func upsertNews(ctx context.Context, db *sql.DB, n *ParsedNews) error {
-	// 简单版本：使用 id 作为主键进行 UPSERT。
-	// 你需要在 Postgres 中先创建对应的 news 表，包含这些字段。
+	// 使用 hash 作为幂等键进行 UPSERT，按 hash 去重。
 	const q = `
 INSERT INTO news (
-  id, task_id, source_id, source_code, url, title, content, publish_time, crawl_time, created_at, updated_at
+	id, hash, task_id, source_id, source_code, url, title, content, publish_time, crawl_time, created_at, updated_at
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, now(), now()
-) ON CONFLICT (id) DO UPDATE SET
-  title = EXCLUDED.title,
-  content = EXCLUDED.content,
-  publish_time = EXCLUDED.publish_time,
-  crawl_time = EXCLUDED.crawl_time,
-  updated_at = now();
+	$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now(), now()
+) ON CONFLICT (hash) DO UPDATE SET
+	title = EXCLUDED.title,
+	content = EXCLUDED.content,
+	publish_time = EXCLUDED.publish_time,
+	crawl_time = EXCLUDED.crawl_time,
+	updated_at = now();
 `
 	_, err := db.ExecContext(ctx, q,
 		n.ID,
+		n.Hash,
 		n.TaskID,
 		n.SourceID,
 		n.SourceCode,
