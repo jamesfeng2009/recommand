@@ -6,7 +6,7 @@ import (
 	"recommand/internal/http/handlers"
 )
 
-func RegisterRoutes(r *gin.Engine, sh *handlers.SourceHandler, th *handlers.TaskHandler) {
+func RegisterRoutes(r *gin.Engine, sh *handlers.SourceHandler, th *handlers.TaskHandler, search *handlers.SearchHandler) {
 	api := r.Group("/api/v1")
 	{
 		crawler := api.Group("/crawler")
@@ -26,6 +26,11 @@ func RegisterRoutes(r *gin.Engine, sh *handlers.SourceHandler, th *handlers.Task
 			crawler.GET("/tasks", th.ListTasks)
 			crawler.GET("/tasks/:task_id", th.GetTask)
 			crawler.POST("/tasks/:task_id/stop", th.StopTask)
+		}
+
+		searchGroup := api.Group("/search")
+		{
+			searchGroup.GET("", search.Search)
 		}
 	}
 }

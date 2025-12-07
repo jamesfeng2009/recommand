@@ -2,6 +2,7 @@ package content
 
 import (
 	"strings"
+	"time"
 
 	"github.com/PuerkitoBio/goquery"
 )
@@ -48,7 +49,28 @@ func ParseGmwMilitary(html string) (*Article, error) {
 		break
 	}
 
-	// leave PublishTime zero for now; can be improved with real page samples
+	// try parse publish time from common selectors
+	for _, sel := range []string{".time", ".pubTime", ".pub_time", "#pubtime", ".info span"} {
+		text := strings.TrimSpace(doc.Find(sel).First().Text())
+		if text == "" {
+			continue
+		}
+		layouts := []string{
+			"2006-01-02 15:04:05",
+			"2006-01-02 15:04",
+			"2006-01-02",
+			"2006年01月02日 15:04",
+		}
+		for _, layout := range layouts {
+			if t, err := time.ParseInLocation(layout, text, time.Local); err == nil {
+				a.PublishTime = t
+				break
+			}
+		}
+		if !a.PublishTime.IsZero() {
+			break
+		}
+	}
 
 	return &a, nil
 }

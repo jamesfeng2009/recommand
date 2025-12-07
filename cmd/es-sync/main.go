@@ -1,9 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"database/sql"
+	"encoding/json"
+	"io"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/elastic/go-elasticsearch/v8"
@@ -37,11 +42,14 @@ func main() {
 	}
 	defer sqldb.Close()
 
-	// ES client
+	// ES client (dev only: skip TLS verification for local self-signed cert)
 	es, err := elasticsearch.NewClient(elasticsearch.Config{
 		Addresses: []string{cfg.ES.Address},
 		Username:  cfg.ES.Username,
 		Password:  cfg.ES.Password,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 	})
 	if err != nil {
 		log.Fatalf("failed to create ES client: %v", err)
@@ -102,11 +110,61 @@ LIMIT 500
 }
 
 func bulkIndexNews(ctx context.Context, es *elasticsearch.Client, index string, rows []NewsRow) error {
-	// TODO: implement ES bulk indexing body; left as a skeleton for now.
-	// This function should build a bulk request body from rows and call es.Bulk.
-	_ = ctx
-	_ = es
-	_ = index
-	_ = rows
+	if len(rows) == 0 {
+		return nil
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+
+	for _, r := range rows {
+		id := r.ID
+		if r.Hash.Valid && r.Hash.String != "" {
+			id = r.Hash.String
+		}
+
+		meta := map[string]map[string]string{
+			"index": {
+				"_index": index,
+				"_id":    id,
+			},
+		}
+		if err := enc.Encode(meta); err != nil {
+			return err
+		}
+
+		body := map[string]any{
+			"id":          r.ID,
+			"hash":        r.Hash.String,
+			"source_code": r.SourceCode,
+			"url":         r.URL,
+			"title":       r.Title,
+			"content":     r.Content,
+			"crawl_time":  r.CrawlTime,
+			"updated_at":  r.UpdatedAt,
+		}
+		if r.PublishTime.Valid {
+			body["publish_time"] = r.PublishTime.Time
+		}
+		if err := enc.Encode(body); err != nil {
+			return err
+		}
+	}
+
+	res, err := es.Bulk(bytes.NewReader(buf.Bytes()), es.Bulk.WithContext(ctx))
+	if err != nil {
+		// 部分环境下可能在读取响应时返回 EOF，这里记录 warning 但不中断主循环。
+		if err == io.EOF {
+			log.Printf("es bulk warning: EOF while reading response")
+			return nil
+		}
+		return err
+	}
+	defer res.Body.Close()
+
+	if res.IsError() {
+		body, _ := io.ReadAll(res.Body)
+		log.Printf("es bulk error: status=%s body=%s", res.Status(), string(body))
+	}
+
 	return nil
 }

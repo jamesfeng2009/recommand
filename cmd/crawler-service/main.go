@@ -1,9 +1,11 @@
 package main
 
 import (
+	"crypto/tls"
 	"log"
 	"net/http"
 
+	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/gin-gonic/gin"
 
 	"recommand/internal/config"
@@ -35,6 +37,19 @@ func main() {
 	}
 	defer kafkaWriter.Close()
 
+	// ES client for search (dev only: skip TLS verification for local self-signed cert)
+	esClient, err := elasticsearch.NewClient(elasticsearch.Config{
+		Addresses: []string{cfg.ES.Address},
+		Username:  cfg.ES.Username,
+		Password:  cfg.ES.Password,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	})
+	if err != nil {
+		logger.Fatalf("failed to create ES client: %v", err)
+	}
+
 	r := gin.Default()
 
 	sourceRepo := repository.NewSourceRepo(pgDB)
@@ -42,8 +57,9 @@ func main() {
 	sourceHandler := handlers.NewSourceHandler(sourceRepo)
 	engine := crawler.NewEngine(taskRepo, sourceRepo, kafkaWriter, logger)
 	taskHandler := handlers.NewTaskHandler(sourceRepo, taskRepo, engine)
+	searchHandler := handlers.NewSearchHandler(esClient, cfg.ES.Index)
 
-	chttp.RegisterRoutes(r, sourceHandler, taskHandler)
+	chttp.RegisterRoutes(r, sourceHandler, taskHandler, searchHandler)
 
 	addr := cfg.HTTP.ListenAddr
 	logger.Printf("crawler-service listening on %s", addr)
